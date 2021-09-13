@@ -17,11 +17,7 @@ namespace ServerSide_Minecraft_Bot
         public const int HT_CAPTION = 0x2;
 
 
-        //Winm WindowsSound
-        [DllImport("winmm.dll")]
-        internal static extern int waveOutGetVolume(IntPtr hwo, out uint dwVolume);
-        [DllImport("winmm.dll")]
-        internal static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume);
+
 
         [DllImportAttribute("user32.dll")]
         public static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
@@ -53,17 +49,14 @@ namespace ServerSide_Minecraft_Bot
         private void bunifuButton1_Click(object sender, EventArgs e)
         {
             bunifuButton1.Enabled = false;
-            bunifuLabel2.Text = "Status: scanning...";
+            status.Text = "Status: scanning...";
             string host = bunifuTextBox3.Text;
             string min = bunifuTextBox1.Text;
             string max = bunifuTextBox2.Text;
             
             portscanner.ip = host;
-            Thread t = new Thread(() => portscanner.LaunchProcess(host, min, max));
-            t.Start();
-
+            new Thread(() => portscanner.LaunchProcess(host, min, max)).Start();
             Update();
-
         }
 
         async private new void Update()
@@ -78,8 +71,9 @@ namespace ServerSide_Minecraft_Bot
                         BeginInvoke(new Action(() =>
                         {
                             open_ports.Text = portscanner.output;
-                            bunifuLabel2.Text = "Status: done!";
+                            status.Text = "Status: done!";
                             bunifuButton1.Enabled = true;
+                            portscanner.end_process();
                         }));
 
                         break;
@@ -125,34 +119,38 @@ namespace ServerSide_Minecraft_Bot
 
         private void bunifuButton11_Click(object sender, EventArgs e)
         {
-            if (checkBox1.Checked == true)
-            {
-                string dns = bunifuTextBox4.Text;
-                Getip(dns, 2);
-            }
+            string[] hosts = richTextBox2.Lines;
+            int lenght = richTextBox2.Lines.Length;
+            bunifuCircleProgress1.Maximum = lenght;
+            richTextBox2.Text = "";
+            bunifuButton11.Enabled = false;
+            richTextBox2.Enabled = false;
 
-            if (checkBox1.Checked == false)
+
+            for (int i = 0; i < lenght; i++)
             {
-                string dns = bunifuTextBox4.Text;
-                Getip(dns, 1);
+                richTextBox2.Text += Getip(hosts[i]);
+                bunifuCircleProgress1.Value = i;
             }
+            bunifuCircleProgress1.Value = bunifuCircleProgress1.Maximum;
+            bunifuButton11.Enabled = true;
+            richTextBox2.Enabled = true;
+
         }
 
-        private void Getip(string dns, int a)
+        private string Getip(string dns)
         {
-            if (a == 1)
+            try
             {
                 WebClient wc = new WebClient();
                 string resolved = wc.DownloadString("https://pingmeminecraftbot.000webhostapp.com/ServerSide/dns_resolve.php?dns=" + dns);
-                richTextBox2.Text += dns + ":" + resolved + "\n";
+                wc.Dispose();
+                return resolved + "\n";
+            }
+            catch {
+                return "IDK";
             }
 
-            if (a == 2)
-            {
-                WebClient wc = new WebClient();
-                string resolved = wc.DownloadString("https://pingmeminecraftbot.000webhostapp.com/ServerSide/dns_resolve.php?dns=" + dns);
-                richTextBox2.Text += resolved + "\n";
-            }
 
         }
 
@@ -172,48 +170,84 @@ namespace ServerSide_Minecraft_Bot
 
         private void bunifuButton12_Click(object sender, EventArgs e)
         {
-            string lservers = "";
-            this.servers.Text.Replace(" ", "");
-            int count = this.servers.Lines.Length;
-            this.servers.Enabled = false;
-            this.check.Enabled = false;
-            this.progress.Value = 0;
-            this.progress.Maximum = count;
-            new Thread(checked(delegate ()
+            check_Servers();
+        }
+
+
+
+
+        private void check_Servers()
+        {
+            BeginInvoke(new Action(delegate ()
             {
+                string lservers = "";
+                this.servers.Text.Replace(" ", "");
+                int count = this.servers.Lines.Length;
+                this.servers.Enabled = false;
+                this.check.Enabled = false;
+                this.progress.Value = 0;
+                this.progress.Maximum = count;
+
                 for (int i = 0; i < count; i++)
                 {
+
                     try
                     {
-                        lservers = lservers + this.serveradd(this.servers.Lines[i]) + "\r\n";
+                        
+                        lservers = lservers + serveradd(servers.Lines[i]) + "\r\n";
+                     
                     }
                     catch
                     {
                     }
-                    this.BeginInvoke(new Action(delegate ()
+                    BeginInvoke(new Action(delegate ()
                     {
                         this.progress.Value++;
                     }));
                 }
-                this.BeginInvoke(new Action(delegate ()
-                {
-                    this.servers.Text = lservers;
-                    this.servers.Enabled = true;
-                    this.check.Enabled = true;
-                    MessageBox.Show("Сервера успешно просканированы!", "Успех!", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
-                    this.progress.Value = 0;
-                }));
-            })).Start();
-
+                this.servers.Text = lservers;
+                this.servers.Enabled = true;
+                this.check.Enabled = true;
+                MessageBox.Show("Сервера успешно просканированы!", "Успех!", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
+                this.progress.Value = 0;
+            }));
         }
+
+
+
+
+
+
+        public void edit_portscanner_textbot(string data)
+        {
+            BeginInvoke(new Action(() =>
+            {
+                open_ports.Text = data;
+            }));
+        }
+
+
 
         private string serveradd(string line)
         {
+
             string value = ServerFunc.GET("https://api.mcsrvstat.us/2/" + line);
             ServerFunc.statics statics = JsonConvert.DeserializeObject<ServerFunc.statics>(value);
             string result;
-            result = string.Concat(new object[]
-                            {
+            if (!statics.online)
+            {
+                result = string.Concat(new object[]
+                {
+                    statics.ip,
+                    ':',
+                    statics.port.ToString(),
+                    " [-]"
+                });
+            }
+            else
+            {
+                result = string.Concat(new object[]
+                {
                     statics.ip,
                     ':',
                     statics.port.ToString(),
@@ -224,10 +258,10 @@ namespace ServerSide_Minecraft_Bot
                     "] [",
                     statics.version,
                     ']'
-                            });
+                });
+            }
             return result;
         }
-
 
 
 
@@ -321,129 +355,65 @@ namespace ServerSide_Minecraft_Bot
             // (set) Token: 0x06000046 RID: 70 RVA: 0x00002A27 File Offset: 0x00001A27
             public string software { get; set; }
 
-            // Token: 0x1700001E RID: 30
-            // (get) Token: 0x06000047 RID: 71 RVA: 0x00002A30 File Offset: 0x00001A30
-            // (set) Token: 0x06000048 RID: 72 RVA: 0x00002A47 File Offset: 0x00001A47
+            
             public string map { get; set; }
 
-            // Token: 0x1700001F RID: 31
-            // (get) Token: 0x06000049 RID: 73 RVA: 0x00002A50 File Offset: 0x00001A50
-            // (set) Token: 0x0600004A RID: 74 RVA: 0x00002A67 File Offset: 0x00001A67
             public ServerFunc._plugins plugins { get; set; }
 
-            // Token: 0x17000020 RID: 32
-            // (get) Token: 0x0600004B RID: 75 RVA: 0x00002A70 File Offset: 0x00001A70
-            // (set) Token: 0x0600004C RID: 76 RVA: 0x00002A87 File Offset: 0x00001A87
             public ServerFunc._mods mods { get; set; }
 
             // Token: 0x17000021 RID: 33
-            // (get) Token: 0x0600004D RID: 77 RVA: 0x00002A90 File Offset: 0x00001A90
-            // (set) Token: 0x0600004E RID: 78 RVA: 0x00002AA7 File Offset: 0x00001AA7
             public ServerFunc._motd info { get; set; }
         }
 
         private class _debug
         {
-            // Token: 0x17000001 RID: 1
-            // (get) Token: 0x06000008 RID: 8 RVA: 0x00002668 File Offset: 0x00001668
-            // (set) Token: 0x06000009 RID: 9 RVA: 0x0000267F File Offset: 0x0000167F
             public bool ping { get; set; }
 
-            // Token: 0x17000002 RID: 2
-            // (get) Token: 0x0600000A RID: 10 RVA: 0x00002688 File Offset: 0x00001688
-            // (set) Token: 0x0600000B RID: 11 RVA: 0x0000269F File Offset: 0x0000169F
             public bool query { get; set; }
 
-            // Token: 0x17000003 RID: 3
-            // (get) Token: 0x0600000C RID: 12 RVA: 0x000026A8 File Offset: 0x000016A8
-            // (set) Token: 0x0600000D RID: 13 RVA: 0x000026BF File Offset: 0x000016BF
             public bool srv { get; set; }
 
-            // Token: 0x17000004 RID: 4
-            // (get) Token: 0x0600000E RID: 14 RVA: 0x000026C8 File Offset: 0x000016C8
-            // (set) Token: 0x0600000F RID: 15 RVA: 0x000026DF File Offset: 0x000016DF
             public bool querymismatch { get; set; }
 
-            // Token: 0x17000005 RID: 5
-            // (get) Token: 0x06000010 RID: 16 RVA: 0x000026E8 File Offset: 0x000016E8
-            // (set) Token: 0x06000011 RID: 17 RVA: 0x000026FF File Offset: 0x000016FF
             public bool ipinsrv { get; set; }
 
-            // Token: 0x17000006 RID: 6
-            // (get) Token: 0x06000012 RID: 18 RVA: 0x00002708 File Offset: 0x00001708
-            // (set) Token: 0x06000013 RID: 19 RVA: 0x0000271F File Offset: 0x0000171F
             public bool animatedmotd { get; set; }
 
-            // Token: 0x17000007 RID: 7
-            // (get) Token: 0x06000014 RID: 20 RVA: 0x00002728 File Offset: 0x00001728
-            // (set) Token: 0x06000015 RID: 21 RVA: 0x0000273F File Offset: 0x0000173F
             public bool proxypipe { get; set; }
 
-            // Token: 0x17000008 RID: 8
-            // (get) Token: 0x06000016 RID: 22 RVA: 0x00002748 File Offset: 0x00001748
-            // (set) Token: 0x06000017 RID: 23 RVA: 0x0000275F File Offset: 0x0000175F
             public int cachetime { get; set; }
         }
 
         private class _motd
         {
-            // Token: 0x17000009 RID: 9
-            // (get) Token: 0x06000019 RID: 25 RVA: 0x00002770 File Offset: 0x00001770
-            // (set) Token: 0x0600001A RID: 26 RVA: 0x00002787 File Offset: 0x00001787
             public string[] raw { get; set; }
 
-            // Token: 0x1700000A RID: 10
-            // (get) Token: 0x0600001B RID: 27 RVA: 0x00002790 File Offset: 0x00001790
-            // (set) Token: 0x0600001C RID: 28 RVA: 0x000027A7 File Offset: 0x000017A7
             public string[] clean { get; set; }
 
-            // Token: 0x1700000B RID: 11
-            // (get) Token: 0x0600001D RID: 29 RVA: 0x000027B0 File Offset: 0x000017B0
-            // (set) Token: 0x0600001E RID: 30 RVA: 0x000027C7 File Offset: 0x000017C7
             public string[] html { get; set; }
         }
 
         private class _mods
         {
-            // Token: 0x1700000C RID: 12
-            // (get) Token: 0x06000020 RID: 32 RVA: 0x000027D8 File Offset: 0x000017D8
-            // (set) Token: 0x06000021 RID: 33 RVA: 0x000027EF File Offset: 0x000017EF
             public string[] names { get; set; }
 
-            // Token: 0x1700000D RID: 13
-            // (get) Token: 0x06000022 RID: 34 RVA: 0x000027F8 File Offset: 0x000017F8
-            // (set) Token: 0x06000023 RID: 35 RVA: 0x0000280F File Offset: 0x0000180F
             public string[] raw { get; set; }
         }
 
         private class _players
         {
-            // Token: 0x1700000E RID: 14
-            // (get) Token: 0x06000025 RID: 37 RVA: 0x00002820 File Offset: 0x00001820
-            // (set) Token: 0x06000026 RID: 38 RVA: 0x00002837 File Offset: 0x00001837
             public int online { get; set; }
 
-            // Token: 0x1700000F RID: 15
-            // (get) Token: 0x06000027 RID: 39 RVA: 0x00002840 File Offset: 0x00001840
-            // (set) Token: 0x06000028 RID: 40 RVA: 0x00002857 File Offset: 0x00001857
             public int max { get; set; }
 
-            // Token: 0x17000010 RID: 16
-            // (get) Token: 0x06000029 RID: 41 RVA: 0x00002860 File Offset: 0x00001860
-            // (set) Token: 0x0600002A RID: 42 RVA: 0x00002877 File Offset: 0x00001877
             public string[] list { get; set; }
         }
 
         private class _plugins
         {
-            // Token: 0x17000011 RID: 17
-            // (get) Token: 0x0600002C RID: 44 RVA: 0x00002888 File Offset: 0x00001888
-            // (set) Token: 0x0600002D RID: 45 RVA: 0x0000289F File Offset: 0x0000189F
             public string[] names { get; set; }
 
-            // Token: 0x17000012 RID: 18
-            // (get) Token: 0x0600002E RID: 46 RVA: 0x000028A8 File Offset: 0x000018A8
-            // (set) Token: 0x0600002F RID: 47 RVA: 0x000028BF File Offset: 0x000018BF
             public string[] raw { get; set; }
         }
 
@@ -493,5 +463,6 @@ namespace ServerSide_Minecraft_Bot
             [DllImport("winmm.dll")]
             internal static extern int waveOutSetVolume(IntPtr hwo, uint dwVolume);
         }
+
     }
 }

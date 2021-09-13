@@ -13,12 +13,13 @@ namespace ServerSide_Minecraft_Bot
 {
     class PortScanner
     {
-        Process process = new Process();
+        public Process process = new Process();
         public string data;
         public string ip;
         public string status;
         public string hosts;
         public string output = null;
+
 
         public void LaunchProcess(string host, string min, string max)
         {
@@ -50,12 +51,6 @@ namespace ServerSide_Minecraft_Bot
                 hosts = host;
             }
             catch { }
-
-
-
-
-            //below line is optional if we want a blocking call
-            //process.WaitForExit();
         }
 
         public void process_Exited(object sender, EventArgs e)
@@ -109,7 +104,7 @@ namespace ServerSide_Minecraft_Bot
                 Console.WriteLine(e.Data + "\n");
             }
             catch { }
-            
+
         }
 
         void process_OutputDataReceived(object sender, DataReceivedEventArgs e)
@@ -119,7 +114,7 @@ namespace ServerSide_Minecraft_Bot
                 data += e.Data + "\n";
                 status = "wait";
 
-                if (data.Contains("rate:  0.00-kpps, 100.00% done"))
+                if (data.Contains("100.00% done"))
                 {
                     process.Kill();
                     process.CancelOutputRead();
@@ -129,6 +124,19 @@ namespace ServerSide_Minecraft_Bot
             }
             catch { }
 
+        }
+
+        public void end_process()
+        {
+            try
+            {
+                process.CancelOutputRead();
+                process.CancelErrorRead();
+                process.Close();
+                process.Kill();
+                process.Dispose();
+            }
+            catch { }
         }
     }
 }
